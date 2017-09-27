@@ -16,11 +16,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 class BlogController extends Controller
 {
-    public function listAction(Request $request): Response
+    public function listAction(Request $request, $name): Response
     {
-//        return $this->json(['tou' => $request->get('name'), 'path' => $request->getPathInfo()], 200, ['try' => '1']);
-        return new JsonResponse(['name' => $request->get('name'), 'path' => $request->getPathInfo()], 200, ['kk' => 'vv']);
-
+        return new JsonResponse(['name11' => $name, 'path' => $request->getPathInfo()], 200, ['kk' => 'vv']);
     }
 
     public function showAction($slug)

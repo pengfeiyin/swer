@@ -10,64 +10,55 @@ namespace App;
 
 
 use App\Event\ResponseEvent;
+use App\Listener\AfterResponseListener;
+use App\Listener\BeforeResponseListener;
 use Symfony\Component\EventDispatcher\EventDispatcher;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response as Response;
 use Symfony\Component\HttpFoundation\Request as Request;
-use Symfony\Component\HttpKernel\Controller\ArgumentResolverInterface;
-use Symfony\Component\HttpKernel\Controller\ControllerResolverInterface;
+use Symfony\Component\HttpKernel\Controller\ArgumentResolver as ArgumentResolver;
+use Symfony\Component\HttpKernel\Controller\ControllerResolver as ControllerResolver;
+use Symfony\Component\HttpKernel\EventListener\ResponseListener as ResponseListener;
+use Symfony\Component\HttpKernel\EventListener\RouterListener as RouterListener;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\HttpKernel;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
-use Symfony\Component\Routing\Exception\ResourceNotFoundException;
-use Symfony\Component\Routing\Matcher\UrlMatcherInterface;
+use Symfony\Component\Routing\Matcher\UrlMatcher;
+use Symfony\Component\Routing\RequestContext;
+use Symfony\Component\Routing\RouteCollection;
 
-class Framework implements HttpKernelInterface
+class Framework extends HttpKernel
 {
-    private $dispatcher;
-    private $matcher;
-    private $controllerResolver;
-    private $argumentResolver;
-
-    public function __construct(EventDispatcher $dispatcher, UrlMatcherInterface $matcher, ControllerResolverInterface $controllerResolver, ArgumentResolverInterface $argumentResolver)
+    public function __construct(RouteCollection $routes)
     {
-        $this->dispatcher = $dispatcher;
-        $this->matcher = $matcher;
-        $this->controllerResolver = $controllerResolver;
-        $this->argumentResolver = $argumentResolver;
+        $context = new RequestContext();
+        $matcher = new UrlMatcher($routes, $context);
+        $requestStack = new RequestStack();
+
+        $controllerResolver = new ControllerResolver();
+        $argumentResolver = new ArgumentResolver();
+
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addSubscriber(new RouterListener($matcher, $requestStack));
+        $dispatcher->addSubscriber(new ResponseListener('UTF-8'));
+
+        $dispatcher->addSubscriber(new BeforeResponseListener());
+        $dispatcher->addSubscriber(new AfterResponseListener());
+
+        parent::__construct($dispatcher, $controllerResolver, $requestStack, $argumentResolver);
     }
 
-    public function handler(Request $request)
+    public function handle(Request $request, $type = HttpKernelInterface::MASTER_REQUEST, $catch = true)
     {
-        $this->matcher->getContext()->fromRequest($request);
         try {
-            $request->attributes->add($this->matcher->match($request->getPathInfo()));
-            $controller = $this->controllerResolver->getController($request);
-            $arguments = $this->argumentResolver->getArguments($request, $controller);
-            $response = call_user_func_array($controller, $arguments);
-        } catch (ResourceNotFoundException $e) {
+            $response = parent::handle($request, $type, $catch);
+        } catch (NotFoundHttpException $e) {
             $response = new Response('Not Found', 404);
         } catch (\Exception $e) {
-            $response = new Response('Error Occurred', 500);
+            $response = new Response($e->getMessage(), 500);
         }
-        $this->dispatcher->dispatch('response', new ResponseEvent($response, $request));
-        return $response;
-    }
 
-
-    public function handle(Request $request, $type = self::MASTER_REQUEST, $catch = true)
-    {
-        $this->matcher->getContext()->fromRequest($request);
-        try {
-            $request->attributes->add($this->matcher->match($request->getPathInfo()));
-            $controller = $this->controllerResolver->getController($request);
-            $arguments = $this->argumentResolver->getArguments($request, $controller);
-            $response = call_user_func_array($controller, $arguments);
-        } catch (ResourceNotFoundException $e) {
-            $response = new Response('Not Found', 404);
-        } catch (\Exception $e) {
-            $response = new Response('Error Occurred', 500);
-        }
         $this->dispatcher->dispatch('response', new ResponseEvent($response, $request));
-        //设置cache ttl
-        $response->setTtl(10);
         return $response;
     }
 }
