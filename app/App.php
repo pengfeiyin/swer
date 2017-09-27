@@ -8,11 +8,18 @@
 
 namespace App;
 
+use App\Event\ResponseEvent;
+use App\Listener\AfterResponseListener;
+use App\Listener\BeforeResponseListener;
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\HttpFoundation\HeaderBag;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Controller\ArgumentResolver;
 use Symfony\Component\HttpKernel\Controller\ControllerResolver;
+use Symfony\Component\HttpKernel\EventListener\RouterListener;
+use Symfony\Component\HttpKernel\HttpCache\HttpCache;
+use Symfony\Component\HttpKernel\HttpCache\Store;
 use Symfony\Component\Routing\Matcher\UrlMatcher;
 use Symfony\Component\Routing\RequestContext;
 
@@ -96,16 +103,31 @@ class App
                                     $this->getRAW());
         $this->request->headers = new HeaderBag($this->getHEADER());
 
+        // route configuration
         $routes = require __DIR__ . "/routes.php";
         $context = new RequestContext();
         $context->fromRequest($this->request);
         $matcher = new UrlMatcher($routes, $context);
+        $requestStack = new RequestStack();
 
+        // event dispatcher configuration
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addSubscriber(new BeforeResponseListener());
+        $dispatcher->addSubscriber(new AfterResponseListener());
+        $dispatcher->addSubscriber(new RouterListener($matcher, $requestStack));
+//        $dispatcher->addListener('response', [new BeforeResponseListener(), 'onResponse']);
+//        $dispatcher->addListener('response', [new AfterResponseListener(), 'onResponse']);
+
+        // resolver configuration
         $controllerResolver = new ControllerResolver();
         $argumentResolver = new ArgumentResolver();
 
-        $framework = new Framework(new EventDispatcher(), $matcher, $controllerResolver, $argumentResolver);
-        $response = $framework->handler($this->request);
+        $framework = new Framework($dispatcher, $matcher, $controllerResolver, $argumentResolver);
+        $framework = new HttpCache(
+            $framework,
+            new Store(__DIR__ . '/../cache')
+        );
+        $response = $framework->handle($this->request);
         $response->send();
     }
 }
