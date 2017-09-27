@@ -8,19 +8,13 @@
 
 namespace App;
 
-
 use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\HttpFoundation\HeaderBag;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Controller\ArgumentResolver;
 use Symfony\Component\HttpKernel\Controller\ControllerResolver;
-use Symfony\Component\HttpKernel\EventListener\RouterListener;
 use Symfony\Component\Routing\Matcher\UrlMatcher;
 use Symfony\Component\Routing\RequestContext;
-use Symfony\Component\Routing\Route;
-use Symfony\Component\Routing\RouteCollection;
 
 class App
 {
@@ -101,29 +95,17 @@ class App
                                     $this->getSERVER(),
                                     $this->getRAW());
         $this->request->headers = new HeaderBag($this->getHEADER());
-        
-//        $routes = new RouteCollection();
-//        $routes->add('swer', new Route('/swer/{name}', [
-//            '_controller' => function(Request $request) {
-//                return new Response(sprintf("Hello %s", $request->get('name')));
-//            }
-//        ]));
-//        $matcher = new UrlMatcher($routes, new RequestContext());
-//
-//        $dispatcher = new EventDispatcher();
-//        $dispatcher->addSubscriber(new RouterListener($matcher, new RequestStack()));
-//        $controllerResolver = new ControllerResolver();
-//        $argumentResolver = new ArgumentResolver();
-        
-//        $kernel = new AppKernel($dispatcher, $controllerResolver, new RequestStack(), $argumentResolver);
-        $kernel = new AppKernel('dev', true);
-        $response = $kernel->handle($this->request);
+
+        $routes = require __DIR__ . "/routes.php";
+        $context = new RequestContext();
+        $context->fromRequest($this->request);
+        $matcher = new UrlMatcher($routes, $context);
+
+        $controllerResolver = new ControllerResolver();
+        $argumentResolver = new ArgumentResolver();
+
+        $framework = new Framework(new EventDispatcher(), $matcher, $controllerResolver, $argumentResolver);
+        $response = $framework->handler($this->request);
         $response->send();
-        $kernel->terminate($this->request, $response);
-    }
-
-    private function wrapResponse()
-    {
-
     }
 }
