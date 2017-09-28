@@ -20,6 +20,7 @@ use Symfony\Component\HttpKernel\Controller\ArgumentResolver as ArgumentResolver
 use Symfony\Component\HttpKernel\Controller\ControllerResolver as ControllerResolver;
 use Symfony\Component\HttpKernel\EventListener\ResponseListener as ResponseListener;
 use Symfony\Component\HttpKernel\EventListener\RouterListener as RouterListener;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\HttpKernel;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
@@ -53,11 +54,13 @@ class Framework extends HttpKernel
         try {
             $response = parent::handle($request, $type, $catch);
         } catch (NotFoundHttpException $e) {
-            $response = new Response('Not Found', 404);
+            $response = new Response('Not Found', Response::HTTP_NOT_FOUND);
+        } catch (MethodNotAllowedHttpException $e) {
+            $response = new Response('Method Not Allowed', Response::HTTP_METHOD_NOT_ALLOWED);
         } catch (\Exception $e) {
-            $response = new Response($e->getMessage(), 500);
+            $response = new Response($e->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
         }
-
+        
         $this->dispatcher->dispatch('response', new ResponseEvent($response, $request));
         return $response;
     }
